@@ -5,16 +5,19 @@ require 'sezame-sdk/version'
 Gem::Specification.new do |s|
   s.name        = 'sezame-sdk'
   s.version     = SezameSDK::VERSION
-  s.date        = '2015-11-27'
+  s.date        = '2016-03-19'
   s.platform    = Gem::Platform::RUBY
-  s.authors     = ['Michael Bretterklieber']
-  s.email       = ['sezame-ruby@bretterklieber.com']
+  s.authors     = ['Finpin']
+  s.email       = ['office@finpintech.com']
   s.homepage    = 'https://www.seza.me/'
-  s.license     = 'MIT'
+  s.license     = 'BSD'
   s.summary     = 'Sezame ruby SDK'
   s.description = <<EOF
-SezameSDK allows you to integrate the next generation
-authentication system into your application.
+Passwordless multi-factor authentication.
+
+Unlike password-based solutions that require you to remember just another PIN or password,
+sezame is a secure and simple multi-factor authentication solution.
+You only need the username and your fingerprint on your smartphone to log into any sezame-enabled site.
 EOF
 
   s.add_dependency 'rqrcode', '~> 0'
