@@ -7,10 +7,9 @@ Unlike password-based solutions that require you to remember just another PIN or
 
 ## Installation
 
-Use [Composer](https://getcomposer.org/) to install the library.
+
 
 ``` bash
-$ composer require finpin/sezame-sdk
 ```
 
 ## Steps
@@ -36,16 +35,15 @@ done by sending the register call using your recovery e-mail entered during the 
 process.
 You'll get an authentication request on your Sezame app, which must be authorized.
 
-```php
+```ruby
 
-$client = new \SezameLib\Client();
+client = Sezame::Client.new
 
-$registerRequest = $client->register()->setEmail('example@example.com')->setName('my new client');
-
-$registerResponse = $registerRequest->send();
-
-$clientcode   = $registerResponse->getClientCode();
-$sharedsecret = $registerResponse->getSharedSecret();
+response = client.register 'foo@example.com', 'rubysdk test'
+if response.is_ok
+  p response.get_clientcode
+  p response.get_sharedsecret
+end
 
 ```
 
@@ -53,30 +51,25 @@ $sharedsecret = $registerResponse->getSharedSecret();
 
 After you have authorized the registration on your mobile device you can request the certificate.
 
-```php
+```ruby
 
-$client = new \SezameLib\Client();
+client = Sezame::Client.new
 
-$privateKeyPassword = 'somethingsecret';
+request = client.makecsr(clientcode, 'foo@example.com')
 
-$csrKey = $client->makeCsr($clientcode, 'example@example.com', $privateKeyPassword,
-  Array(
-    'countryName'            => 'AT',
-    'stateOrProvinceName'    => 'Vienna',
-    'localityName'           => 'Vienna',
-    'organizationName'       => 'my company name',
-    'organizationalUnitName' => 'IT division'
-  ));
+p request[:csr]
+p request[:key]
+# p key.to_pem
+# p key.public_key.to_pem
 
-$signRequest = $client->sign()->setCSR($csrKey->csr)->setSharedSecret($sharedsecret);
-
-$cert = $signResponse->getCertificate();
-
-printf("CSR:\n%s\n\n", $csrKey->csr);
-printf("Certificate:\n%s\n\n", $cert);
-printf("Private Key:\n%s\n\n", $csrKey->key);
-
+response = client.sign(request[:csr], sharedsecret)
+if response.is_ok
+  p response.get_cert
+else
+  p response.get_message
+end
 ```
+
 Store the certificate and the private key within your system, it is recommended to protect your
 private key with a secure passphrase.
 The certificate and the private key is needed for subsequent calls to the Sezame servers, sign
@@ -87,78 +80,78 @@ and register are the only two calls which can be used without the client certifi
 Once you have successfully obtained the client certificate, let your customers pair their devices
 with your application, this is done by displaying a QR code which is read by the Sezame app.
 
-```php
+```ruby
 
-$client = new \SezameLib\Client($certfile, $keyfile);
+client = Sezame::Client.new(cert, privatekey)
 
-$username = 'foo-client-user';
+unless client.link_status('someusername')
+  p 'user is not linked'
+end
 
-// check pairing status of a certain user
-$statusRequest = $client->linkStatus();
-$statusResponse = $statusRequest->setUsername($username)->send();
+response = client.link('someusername')
 
-if ($statusResponse->isLinked()) {
-  print "user already has been linked\n";
-  die;
-}
+if response.is_duplicate
+  p 'user already linked'
+  exit
+end
 
-$linkRequest = $client->link();
-$linkResponse = $linkRequest->setUsername($username)->send();
+unless response.is_ok
+  p response.get_message
+  exit
+end
 
-if ($linkResponse->isDuplicate()) {
-  print "user already has been linked\n";
-  die;
-}
+image = response.qrcode.as_png(
+    fill:  'white',
+    color: 'black',
+    size:  300,
+    file:  'qr.png'
+)
 
-$qrCode = $linkResponse->getQrCode($username);
-$qrCode->setSize(300)->setPadding(10); // optionally adjust qrcode dimensions
-
-printf('<img src="%s"/>', $qrCode->getDataUri());
-
-file_put_contents('qrcode.html', sprintf('<img src="%s"/>', $qrCode->getDataUri()));
-
+# prints as html table
+p response.qrcode.as_html
 ```
 
 ### auth
 
 To authenticate users with Sezame, use the auth call.
 
-```php
+```ruby
 
-$client = new \SezameLib\Client($certfile, $keyfile, $keyPassword);
-$username = 'foo-client-user';
+timeout = 10 # secs
 
-$timeout = 10;
-$authRequest = $client->authorize();
-$authRequest->setUsername($username);
-$authResponse = $authRequest->send();
+client = Sezame::Client.new(cert, privatekey)
 
-if ($authResponse->isNotfound()) {
-  // user not paired
-}
+response = client.authorize('someusername')
 
-if ($authResponse->isOk())
-{
-  $statusRequest = $client->status();
-  $statusRequest->setAuthId($authResponse->getId());
-  for ($i = 0; $i < $timeout; $i++)
-  {
-    $statusResponse = $statusRequest->send();
-    if ($statusResponse->isAuthorized())
-    {
-      // request has been authorized
-    }
-    if ($statusResponse->isDenied()) 
-    {
-      // request has been denied
-    }
-    
-    sleep(1);
-  }
-  
-  printf("user did not respond within %d seconds\n", $timeout);
-}
+if response.is_notfound
+  p response.get_message
+  exit
+end
 
+unless response.is_ok
+  p response.get_errors
+  p response.get_message
+  exit
+end
+
+auth_id = response.get_id
+
+timeout.times do |num|
+  status = client.status(auth_id)
+  if status.is_authorized
+    p 'authorized'
+    exit
+  end
+
+  if status.is_denied
+    p 'denied'
+    exit
+  end
+
+  sleep(1)
+end
+
+p 'timeout'
 ```
 
 ### fraud
@@ -166,21 +159,25 @@ if ($authResponse->isOk())
 It is possible to inform users about fraud attempts, this request could be send, if the user logs in
 using the password.
 
-```php
+```ruby
 
-$client = new \SezameLib\Client($certfile, $keyfile, $keyPassword);
-$username = 'foo-client-user';
-$authRequest = $client->authorize();
-$authRequest->setType('fraud');
-$authRequest->setUsername($username);
-$authResponse = $authRequest->send();
-if ($authResponse->isNotfound()) {
-  // user not paired
-}
-if ($authResponse->isOk())
-{
-  printf("user notified about possible fraud attempt\n");
-}
+client = Sezame::Client.new(cert, privatekey)
+
+response = client.fraud('someusername')
+
+if response.is_notfound
+  p response.get_message
+  exit
+end
+
+unless response.is_ok
+  p response.get_errors
+  p response.get_message
+  exit
+end
+
+p 'user notified about fraud attempt'
+
 
 ```
 
@@ -189,34 +186,17 @@ if ($authResponse->isOk())
 To disable the service use the cancel call, no further requests will be accepted by the Sezame
 servers:
 
-```php
+```ruby
 
-$client = new \SezameLib\Client($certfile, $keyfile, $keyPassword);
-$client->cancel()->send();
+client = Sezame::Client.new(cert, privatekey)
 
-```
+response = client.cancel
+if response.is_ok
+  p 'service cancelled'
+end
 
-### error handling
-
-The Sezame Lib throws exceptions in the case of an error.
-
-```php
-
-$client = new \SezameLib\Client($certfile, $keyfile);
-try {
-  $client->cancel()->send();
-  printf("Client canceled\n");
-} catch (\SezameLib\Exception\Connection $e) {
-  printf("Connection failure: %s %d\n",
-  $e->getMessage(), $e->getCode());
-} catch (\SezameLib\Exception\Parameter $e) {
-  print_r($e->getErrorInfo());
-} catch (\SezameLib\Exception\Response $e) {
-  printf("%s %d\n", $e->getMessage(), $e->getCode());
-}
 
 ```
-
 
 ## License
 
