@@ -7,9 +7,10 @@ Unlike password-based solutions that require you to remember just another PIN or
 
 ## Installation
 
-
+You may get the latest stable version from Rubygems.
 
 ``` bash
+gem install sezame-sdk
 ```
 
 ## Steps
@@ -36,6 +37,8 @@ process.
 You'll get an authentication request on your Sezame app, which must be authorized.
 
 ```ruby
+
+require 'sezame-sdk'
 
 client = Sezame::Client.new
 
